@@ -11,32 +11,33 @@ import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
-from numpy import *
+import numpy as np
+from model_gan import *
 # from simple_ae import Encoder
 
 from IPython import embed
 
+lr = 0.0002
+nz = 100 # size of latent variable
+ngf = 64 
+ndf = 64 
+nef = 16
+
+batchSize = 64
+imageSize = 64 # 'the height / width of the input image to network'
+workers = 2 # 'number of data loading workers'
+nepochs = 50
+beta1 = 0.5 # 'beta1 for adam. default=0.5'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', required=True, help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
-parser.add_argument('--dataroot', required=True, help='path to dataset')
-parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
-parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
-parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
-parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
-parser.add_argument('--ngf', type=int, default=64)
-parser.add_argument('--ndf', type=int, default=64)
-parser.add_argument('--nef', type=int, default=16)
-parser.add_argument('--niter', type=int, default=50, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('--cuda', action='store_true', help='enables cuda')
-parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
+parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
+parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path to dataset')
+parser.add_argument('--cuda', default='0', help='availabel cuda device')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./trained-model', help='folder to output model checkpoints')
-parser.add_argument('--outp', default='./fake-imgs', help='folder to output images')
-parser.add_argument('--manualSeed', type=int, help='manual seed')
+parser.add_argument('--outf', default='./try', help='folder to output model checkpoints')
+parser.add_argument('--outp', default='./try', help='folder to output images')
+parser.add_argument('--manualSeed', type=int, help='manual random seed')
 parser.add_argument('--classes', default='bedroom', help='comma separated list of classes for the lsun data set')
 
 opt = parser.parse_args()
@@ -54,9 +55,6 @@ random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
 
 cudnn.benchmark = True
-
-if torch.cuda.is_available() and not opt.cuda:
-    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 if opt.dataset in ['imagenet', 'folder', 'lfw']:
     # folder dataset
@@ -105,7 +103,8 @@ assert dataset
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                          shuffle=True, num_workers=int(opt.workers))
 
-device = torch.device("cuda:0" if opt.cuda else "cpu")
+
+device = torch.device("cuda:"+opt.cuda)
 ngpu = int(opt.ngpu)
 nz = int(opt.nz)
 ngf = int(opt.ngf)

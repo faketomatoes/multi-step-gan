@@ -98,7 +98,7 @@ elif opt.dataset == 'cifar10':
                           transforms.ToTensor()
                       ])),
         batch_size=batch_size, shuffle=True)
-    m_true, s_true = compute_cifar10_statistics(batch_size=50, dims=2048, cuda=True)
+    m_true, s_true = compute_cifar10_statistics(batch_size=50, dims=2048, cuda=True, data_root=opt.dataroot)
 else:
     raise NotImplementedError
 
