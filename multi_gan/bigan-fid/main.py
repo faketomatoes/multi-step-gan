@@ -175,7 +175,6 @@ for epoch in range(num_epochs):
 
         dataset_fake = generate_sample(generator = netG, latent_size = latent_size)
         fid = calculate_fid(dataset_fake, m_true, s_true)
-
         print("The Frechet Inception Distance:", fid)
 
 

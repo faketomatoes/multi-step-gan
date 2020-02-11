@@ -3,7 +3,7 @@ from torch import nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, nc, nef, nz):
+    def __init__(self, nz, nef, nc):
         super(Encoder, self).__init__()
         self.model = nn.Sequential(
             # input is (nc) x 64 x 64
@@ -32,7 +32,7 @@ class Encoder(nn.Module):
         return x
 
 class Decoder(nn.Module):
-    def __init__(self, nc, ngf, nz):
+    def __init__(self, nz, ngf, nc):
         super(Decoder, self).__init__()
         self.model = nn.Sequential(
         # input is Z, going into a convolution
