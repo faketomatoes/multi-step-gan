@@ -118,6 +118,7 @@ criterion = nn.BCELoss() #binary cross entropy
 reconstruct = nn.L1Loss()
 
 count = 0
+test_iter = 0
 
 for epoch in range(num_epochs):
 
@@ -125,7 +126,7 @@ for epoch in range(num_epochs):
     ip_num = max(ip)
     ip_num = ip_num/(2 * interpolation)
 
-    writer = SummaryWriter('~/multistep_gan/runs/bigan_inter')
+    writer = SummaryWriter('../runs/bigan_inter')
 
     i = 0
     for (data, target) in train_loader:
@@ -191,12 +192,14 @@ for epoch in range(num_epochs):
         i += 1
 
     if (epoch + 1) % 10 == 0:
+        test_iter += 1 
         torch.save(netG.state_dict(), './%s/netG_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netE.state_dict(), './%s/netE_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netD.state_dict(), './%s/netD_epoch_%d.pth' % (opt.save_model_dir, epoch))
 
         dataset_fake = generate_sample(generator = netG, latent_size = latent_size)
         fid = calculate_fid(dataset_fake, m_true, s_true)
+        writer.add_scalar('fid score', fid, global_step=test_iter)
 
         print("The Frechet Inception Distance:", fid)
 

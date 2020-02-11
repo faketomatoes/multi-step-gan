@@ -9,6 +9,8 @@ from fid import *
 import os
 import numpy as np
 
+from tensorboardX import SummaryWriter
+
 batch_size = 100
 lr = 1e-4
 latent_size = 256
@@ -112,10 +114,16 @@ optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
 criterion = nn.BCELoss()
 
+count = 0
+test_iter = 0
+
 for epoch in range(num_epochs):
+
+    writer = SummaryWriter('../runs/bigan')
 
     i = 0
     for (data, target) in train_loader:
+        count += 1
 
         real_label = Variable(tocuda(torch.ones(batch_size)))
         fake_label = Variable(tocuda(torch.zeros(batch_size)))
@@ -158,6 +166,9 @@ for epoch in range(num_epochs):
         loss_g.backward()
         optimizerG.step()
 
+        writer.add_scalar('D Loss', loss_d.item(), global_step=count)
+        writer.add_scalar('G Loss', loss_g.item(), global_step=count)
+
         if i % 100 == 0:
             print("Epoch :", epoch, "Iter :", i, "D Loss :", loss_d.item(), "G loss :", loss_g.item(),
                   "D(x) :", output_real.mean().item(), "D(G(x)) :", output_fake.mean().item())
@@ -169,12 +180,15 @@ for epoch in range(num_epochs):
         i += 1
 
     if epoch % 10 == 0:
+        test_iter += 1
         torch.save(netG.state_dict(), './%s/netG_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netE.state_dict(), './%s/netE_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netD.state_dict(), './%s/netD_epoch_%d.pth' % (opt.save_model_dir, epoch))
 
         dataset_fake = generate_sample(generator = netG, latent_size = latent_size)
         fid = calculate_fid(dataset_fake, m_true, s_true)
+
+        writer.add_scalar('fid score', fid, global_step=test_iter)
 
         print("The Frechet Inception Distance:", fid)
 
