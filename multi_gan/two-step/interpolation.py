@@ -13,6 +13,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import numpy as np
 from model_gan import *
+from model_ae import *
 # from simple_ae import Encoder
 
 from IPython import embed
@@ -32,7 +33,7 @@ beta1 = 0.5 # 'beta1 for adam. default=0.5'
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path to dataset')
-parser.add_argument('--cuda', default='0', help='availabel cuda device')
+parser.add_argument('--cuda_device', default='0', help='available cuda device.')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
 parser.add_argument('--outf', default='./try', help='folder to output model checkpoints')
@@ -104,13 +105,8 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                          shuffle=True, num_workers=int(opt.workers))
 
 
-device = torch.device("cuda:"+opt.cuda)
-ngpu = int(opt.ngpu)
-nz = int(opt.nz)
-ngf = int(opt.ngf)
-ndf = int(opt.ndf)
-nef = int(opt.nef)
-
+os.environ["CUDA_VISIBLE_DEVICES"] = opt.cuda_device
+device = torch.device("cuda:0")
 
 # custom weights initialization called on netG and netD
 def weights_init(m):
@@ -120,36 +116,6 @@ def weights_init(m):
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
-
-
-class Encoder(nn.Module):
-    def __init__(self):
-        super(Encoder, self).__init__()
-        self.model = nn.Sequential(
-            # input is (nc) x 64 x 64
-            nn.Conv2d(nc, nef, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (nef) x 32 x 32
-            nn.Conv2d(nef, nef * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(nef * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (nef*2) x 16 x 16
-            nn.Conv2d(nef * 2, nef * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(nef * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (nef*4) x 8 x 8
-            nn.Conv2d(nef * 4, nef * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(nef * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (nef*8) x 4 x 4
-            nn.Conv2d(nef * 8, nz, 4, 1, 0, bias=False),
-            # nn.Sigmoid()
-            nn.BatchNorm2d(nz)
-        )
-    
-    def forward(self, x):
-        x = self.model(x)
-        return x
 
 encoder = Encoder()
 encoder.load_state_dict(torch.load('./trained-model/sim_encoder.pth'))
