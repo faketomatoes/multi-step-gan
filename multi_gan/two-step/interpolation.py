@@ -28,7 +28,7 @@ nef = 16
 batchSize = 64
 imageSize = 64 # 'the height / width of the input image to network'
 workers = 2 # 'number of data loading workers'
-nepochs = 50
+nepochs = 100
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 
 parser = argparse.ArgumentParser()
@@ -123,6 +123,8 @@ def weights_init(m):
 
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
+    generator.eval()
+    
     z_try = Variable(torch.randn(1, latent_size, 1, 1).to(device))
     data_try = generator(z_try)
 
@@ -167,6 +169,8 @@ fixed_noise = torch.randn(batchSize, nz, 1, 1, device=device)
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
 
+fid_record = []
+
 for epoch in range(nepochs):
     itpl = [20 - epoch, 0]
     itpl_vl = max(itpl)
@@ -188,13 +192,14 @@ for epoch in range(nepochs):
         # errD_real.backward()
         D_x = output.mean().item()
 
-        # inference the latent variable
-        latent_var = encoder(real_cpu)
-        latent_var = latent_var.detach()
-
         # train with fake
         noise = torch.randn(batch_size, nz, 1, 1, device=device)
-        noise = itpl_vl/50 * latent_var + (1 - itpl_vl/50) * noise
+        if itpl_vl > 0:
+            # inference the latent variable
+            netE.eval()
+            latent_var = netE(real_cpu)
+            latent_var = latent_var.detach()
+            noise = itpl_vl/50 * latent_var + (1 - itpl_vl/50) * noise
         fake = netG(noise)
         fake_label = torch.full((batch_size,), 0, device=device)
         output = netD(fake.detach())
@@ -228,6 +233,7 @@ for epoch in range(nepochs):
 
         dataset_fake = generate_sample(generator = netG, latent_size = nz)
         fid = calculate_fid(dataset_fake, m_true, s_true)
+        fid_record.append(fid)
         print("The Frechet Inception Distance:", fid)
 
 
@@ -235,3 +241,9 @@ for epoch in range(nepochs):
     # do checkpointing
     torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch + 1))
     torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch + 1))
+
+with open('./fid_record.txt', 'w') as f:
+    for i in fid_record:
+        f.write(str(i) + '\n')
+
+

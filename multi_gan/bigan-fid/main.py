@@ -65,6 +65,8 @@ def get_log_odds(raw_marginals):
     return torch.log(marginals / (1 - marginals))
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
+    generator.eval()
+    
     z_try = Variable(tocuda(torch.randn(1, latent_size, 1, 1)))
     data_try = generator(z_try)
 
@@ -111,6 +113,8 @@ optimizerG = optim.Adam([{'params' : netE.parameters()},
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
 criterion = nn.BCELoss()
+
+fid_record = []
 
 for epoch in range(num_epochs):
 
@@ -175,7 +179,12 @@ for epoch in range(num_epochs):
 
         dataset_fake = generate_sample(generator = netG, latent_size = latent_size)
         fid = calculate_fid(dataset_fake, m_true, s_true)
+        fid_record.append(fid)
         print("The Frechet Inception Distance:", fid)
 
 
         vutils.save_image(d_fake.cpu().data[:16, ], './%s/fake_%d.png' % (opt.save_image_dir, epoch))
+
+with open('./fid_record.txt', 'w') as f:
+    for i in fid_record:
+        f.write(str(i) + '\n')

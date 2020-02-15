@@ -68,6 +68,8 @@ def get_log_odds(raw_marginals):
     return torch.log(marginals / (1 - marginals))
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
+    generator.eval()
+    
     z_try = Variable(tocuda(torch.randn(1, latent_size, 1, 1)))
     data_try = generator(z_try)
 
