@@ -125,11 +125,12 @@ def weights_init(m):
 
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
+    generator.eval()
+    
     z_try = Variable(torch.randn(1, latent_size, 1, 1).to(device))
     data_try = generator(z_try)
 
     data_sample = np.empty((num_image, data_try.shape[1], data_try.shape[2], data_try.shape[3]))
-
     for i in range(0, num_image, batch_size):
         start = i
         end = i + batch_size
@@ -172,8 +173,10 @@ optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerE = optim.Adam(netE.parameters(), lr=lr_encoder, betas=(beta1, 0.999), weight_decay=weight_decay_coeff)
 
+fid_record = []
+
 for epoch in range(nepochs):
-    itpl = [20 - epoch, 0]
+    itpl = [40 - epoch, 0]
     itpl_vl = max(itpl)
     itpl_vl = float(itpl_vl)
     print("itpl_vl: %d" % itpl_vl)
@@ -192,14 +195,13 @@ for epoch in range(nepochs):
         errD_real = criterion_BCE(output, real_label)
         # errD_real.backward()
         D_x = output.mean().item()
-
-        # inference the latent variable
-        latent_var = netE(real_cpu)
-        latent_var = latent_var.detach()
-
-        # train with fake
         noise = torch.randn(batch_size, nz, 1, 1, device=device)
-        noise = itpl_vl/50 * latent_var + (1 - itpl_vl/50) * noise
+        if itpl_vl > 0:
+            # inference the latent variable
+            netE.eval()
+            latent_var = netE(real_cpu)
+            latent_var = latent_var.detach()
+            noise = itpl_vl/100 * latent_var + (1 - itpl_vl/100) * noise
         fake = netG(noise)
         fake_label = torch.full((batch_size,), 0, device=device)
         output = netD(fake.detach())
@@ -224,11 +226,13 @@ for epoch in range(nepochs):
         ############################
         # (3) Update E network: minimize reconstruction error
         ###########################
-        for k in range(10):
-            errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
-            netE.zero_grad()
-            errE.backward()
-            optimizerE.step()
+        if itpl_vl > 0:
+            for k in range(10):
+                netE.train()
+                errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
+                netE.zero_grad()
+                errE.backward()
+                optimizerE.step()
 
 
         if i % 100 == 0:
@@ -242,7 +246,12 @@ for epoch in range(nepochs):
 
         dataset_fake = generate_sample(generator = netG, latent_size = nz)
         fid = calculate_fid(dataset_fake, m_true, s_true)
+        fid_record.append(fid)
         print("The Frechet Inception Distance:", fid)
          # do checkpointing
         torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch + 1))
         torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch + 1))
+
+with open('./fid_record.txt', 'w') as f:
+    for i in fid_record:
+        f.write(str(i) + '\n')
