@@ -29,7 +29,8 @@ lr_encoder = 0.01
 batchSize = 64
 imageSize = 64 # 'the height / width of the input image to network'
 workers = 2 # 'number of data loading workers'
-nepochs = 50
+nepochs = 100
+num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-5 # weight decay coefficient for training netE.
 
@@ -176,7 +177,7 @@ optimizerE = optim.Adam(netE.parameters(), lr=lr_encoder, betas=(beta1, 0.999), 
 fid_record = []
 
 for epoch in range(nepochs):
-    itpl = [20 - epoch, 0]
+    itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
     itpl_vl = max(itpl)
     itpl_vl = float(itpl_vl)
     print("itpl_vl: %d" % itpl_vl)
@@ -201,7 +202,7 @@ for epoch in range(nepochs):
             netE.eval()
             latent_var = netE(real_cpu)
             latent_var = latent_var.detach()
-            noise = itpl_vl/50 * latent_var + (1 - itpl_vl/50) * noise
+            noise = itpl_vl/nepochs * latent_var + (1 - itpl_vl/nepochs) * noise
         fake = netG(noise)
         fake_label = torch.full((batch_size,), 0, device=device)
         output = netD(fake.detach())
