@@ -13,7 +13,7 @@ batch_size = 100
 lr = 1e-4
 latent_size = 256
 num_epochs = 100
-cuda_device = "0"
+cuda_device = "1"
 
 
 def boolean_string(s):
@@ -25,8 +25,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', help='cifar10 | svhn', default="cifar10")
 parser.add_argument('--dataroot', help='path to dataset', default="~/datasets/data_cifar10")
 parser.add_argument('--use_cuda', type=boolean_string, default=True)
-parser.add_argument('--save_model_dir', default="./try")
-parser.add_argument('--save_image_dir', default="./try")
+parser.add_argument('--save_model_dir', default="try")
+parser.add_argument('--save_image_dir', default="try")
 parser.add_argument('--reuse', type=boolean_string, default=False)
 parser.add_argument('--save_freq', type=int, default=20)
 opt = parser.parse_args()
@@ -65,6 +65,8 @@ def get_log_odds(raw_marginals):
     return torch.log(marginals / (1 - marginals))
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
+    generator.eval()
+    
     z_try = Variable(tocuda(torch.randn(1, latent_size, 1, 1)))
     data_try = generator(z_try)
 
@@ -86,7 +88,7 @@ if opt.dataset == 'svhn':
                           transforms.ToTensor()
                       ])),
         batch_size=batch_size, shuffle=True)
-#    m_true, s_true = compute_svhn_statistics(batch_size=50, dims=2048, cuda=True)
+#    m_true, s_true = compute_svhn_statistics(batch_size=50, dims=2048, cuda=True) (Not implemented.)
 elif opt.dataset == 'cifar10':
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(root=opt.dataroot, train=True, download=True,
@@ -94,7 +96,7 @@ elif opt.dataset == 'cifar10':
                           transforms.ToTensor()
                       ])),
         batch_size=batch_size, shuffle=True)
-    m_true, s_true = compute_cifar10_statistics(batch_size=50, dims=2048, cuda=True)
+    m_true, s_true = compute_cifar10_statistics(batch_size=50, dims=2048, cuda=True, data_root=opt.dataroot)
 else:
     raise NotImplementedError
 
@@ -111,6 +113,8 @@ optimizerG = optim.Adam([{'params' : netE.parameters()},
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
 criterion = nn.BCELoss()
+
+fid_record = []
 
 for epoch in range(num_epochs):
 
@@ -168,15 +172,19 @@ for epoch in range(num_epochs):
 
         i += 1
 
-    if epoch % 10 == 0:
+    if (epoch + 1) % 10 == 0:
         torch.save(netG.state_dict(), './%s/netG_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netE.state_dict(), './%s/netE_epoch_%d.pth' % (opt.save_model_dir, epoch))
         torch.save(netD.state_dict(), './%s/netD_epoch_%d.pth' % (opt.save_model_dir, epoch))
 
         dataset_fake = generate_sample(generator = netG, latent_size = latent_size)
         fid = calculate_fid(dataset_fake, m_true, s_true)
-
+        fid_record.append(fid)
         print("The Frechet Inception Distance:", fid)
 
 
         vutils.save_image(d_fake.cpu().data[:16, ], './%s/fake_%d.png' % (opt.save_image_dir, epoch))
+
+with open('./fid_record.txt', 'w') as f:
+    for i in fid_record:
+        f.write(str(i) + '\n')
