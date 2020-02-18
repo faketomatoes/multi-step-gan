@@ -202,8 +202,8 @@ def calculate_activation_statistics(dataset, model, batch_size=50,
 
 
 
-def compute_cifar10_statistics(batch_size=50, dims=2048, cuda=True):
-    dataset = datasets.CIFAR10(root="~/datasets/data_cifar10", train=False, download=True,
+def compute_cifar10_statistics(data_root="~/datasets/data_cifar10", batch_size=50, dims=2048, cuda=True):
+    dataset = datasets.CIFAR10(root=data_root, train=False, download=True,
                         transform=transforms.Compose([
                           transforms.ToTensor()
                         ]))
