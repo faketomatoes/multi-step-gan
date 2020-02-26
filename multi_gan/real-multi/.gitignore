@@ -1,1 +1,3 @@
-/tmp/
+./trained_model/*
+./__pycache__
+./try
