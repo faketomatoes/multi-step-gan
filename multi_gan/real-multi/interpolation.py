@@ -30,7 +30,7 @@ batchSize = 64
 imageSize = 64 # 'the height / width of the input image to network'
 workers = 2 # 'number of data loading workers'
 nepochs = 100
-num_inter = 10
+num_inter = 5
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-5 # weight decay coefficient for training netE.
 
@@ -217,8 +217,8 @@ for epoch in range(nepochs):
         # we need a box to restore the real/fake samples
         smp_box = []
         for itp in range(num_inter):
-            noise = itp/num_inter * latent_var + (1 - itp/nepochs) * noise
-            smp_box.append(netG(noise))
+            med_var = np.sqrt(itp/num_inter) * latent_var + np.sqrt(1 - itp/nepochs) * noise
+            smp_box.append(netG(med_var))
         smp_box.append(real_cpu)
 
         output = critic_lst[num_inter - 1](smp_box[num_inter - 2])
@@ -248,10 +248,10 @@ for epoch in range(nepochs):
         if errG.item() < 8:
             for itp in range(num_inter):
                 optimizerD = opt_lst[itp]
-                netD = critic_lst[itp]
-                netD.zero_grad()
-                errD = score_box[itp]
-                errD.backward()
+                # netD = critic_lst[itp]
+                critic_lst[itp].zero_grad()
+                # errD = score_box[itp]
+                score_box[itp].backward()
                 optimizerD.step()
 
         ############################
