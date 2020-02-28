@@ -32,7 +32,7 @@ workers = 2 # 'number of data loading workers'
 nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
-weight_decay_coeff = 5e-5 # weight decay coefficient for training netE.
+weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
@@ -227,13 +227,21 @@ for epoch in range(nepochs):
         ############################
         # (3) Update E network: minimize reconstruction error
         ###########################
-        if itpl_vl > 0:
-            for k in range(10):
-                netE.train()
-                errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
-                netE.zero_grad()
-                errE.backward()
-                optimizerE.step()
+
+        # if itpl_vl > 0:
+        #     for k in range(10):
+        #         netE.train()
+        #         errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
+        #         netE.zero_grad()
+        #         errE.backward()
+        #         optimizerE.step()
+
+        for k in range(10):
+            netE.train()
+            errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
+            netE.zero_grad()
+            errE.backward()
+            optimizerE.step()
 
 
         if i % 100 == 0:
