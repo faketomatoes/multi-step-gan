@@ -36,12 +36,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', help='cifar10 | svhn', default="cifar10")
 parser.add_argument('--dataroot', help='path to dataset', default="~/datasets/data_cifar10")
 parser.add_argument('--cuda_device', default="0")
-parser.add_argument('--save_model_dir', default="./model_save")
+parser.add_argument('--save_model_dir', default="./trained_model")
 parser.add_argument('--save_image_dir', default='./mlp_img')
 opt = parser.parse_args()
 print(opt)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = opt.cuda_device
+ngpu = len(opt.cuda_device.split(','))
 if not os.path.exists(opt.save_image_dir):
     os.mkdir(opt.save_image_dir)
 
@@ -66,7 +67,7 @@ else:
     raise NotImplementedError
 
 # model = autoencoder().cuda()
-encoder = Encoder(nc=nc, nef=nef, nz=nz).cuda()
+encoder = Encoder(ngpu = ngpu, nc=nc, nef=nef, nz=nz).cuda()
 decoder = Decoder(nc=nc, ngf=ngf, nz=nz).cuda()
 
 criterion = nn.MSELoss()
