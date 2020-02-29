@@ -16,7 +16,7 @@ class Generator(nn.Module):
         self.main = nn.Sequential(
             # input is Z, going into a convolution
             CustomeAffine(nz),
-            nn.ConvTranspose2d(     nz, ngf * 8, 4, 1, 0, bias=False),
+            nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False),
             nn.BatchNorm2d(ngf * 8),
             nn.ReLU(True),
             # state size. (ngf*8) x 4 x 4

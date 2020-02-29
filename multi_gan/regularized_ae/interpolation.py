@@ -14,8 +14,7 @@ import torchvision.utils as vutils
 import numpy as np
 from model_GAN import *
 from model_ae import *
-from dataset import *
-from MNIST_classifier import *
+from fid import *
 # from simple_ae import Encoder
 
 from IPython import embed
@@ -34,16 +33,17 @@ nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
+reg_coeff = 1 # trade-off coeff of the GAN loss regularizer
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--source_root', default='~/datasets', help='path to dataset MNIST')
+parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
+parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path to dataset')
 parser.add_argument('--cuda_device', default='0', help='available cuda device.')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
 parser.add_argument('--netE', default='', help='path to netE.')
-parser.add_argument('--classifier_M', default='./trained-models/MNIST_classifier.pth', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./trained-models', help='folder to output model checkpoints')
-parser.add_argument('--outp', default='./fake-imgs-onestep', help='folder to output images')
+parser.add_argument('--outf', default='./trained_model', help='folder to output model checkpoints')
+parser.add_argument('--outp', default='./fake-imgs', help='folder to output images')
 parser.add_argument('--manualSeed', type=int, help='manual random seed')
 parser.add_argument('--classes', default='bedroom', help='comma separated list of classes for the lsun data set')
 
@@ -63,9 +63,50 @@ torch.manual_seed(opt.manualSeed)
 
 cudnn.benchmark = True
 
-#dataset = Stacked_MNIST(imageSize=imageSize)
-dataset = Stacked_MNIST(load=False, source_root=opt.source_root, imageSize=imageSize)
-nc=3
+if opt.dataset in ['imagenet', 'folder', 'lfw']:
+    # folder dataset
+    dataset = dset.ImageFolder(root=opt.dataroot,
+                               transform=transforms.Compose([
+                                   transforms.Resize(imageSize),
+                                   transforms.CenterCrop(imageSize),
+                                   transforms.ToTensor(),
+                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                               ]))
+    nc=3
+elif opt.dataset == 'lsun':
+    classes = [ c + '_train' for c in opt.classes.split(',')]
+    dataset = dset.LSUN(root=opt.dataroot, classes=classes,
+                        transform=transforms.Compose([
+                            transforms.Resize(imageSize),
+                            transforms.CenterCrop(imageSize),
+                            transforms.ToTensor(),
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                        ]))
+    nc=3
+elif opt.dataset == 'cifar10':
+    dataset = dset.CIFAR10(root=opt.dataroot, download=True,
+                           transform=transforms.Compose([
+                               transforms.Resize(imageSize),
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                           ]))
+    nc=3    
+    m_true, s_true = compute_cifar10_statistics()
+
+elif opt.dataset == 'mnist':
+        dataset = dset.MNIST(root=opt.dataroot, download=True,
+                           transform=transforms.Compose([
+                               transforms.Resize(imageSize),
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.5,), (0.5,)),
+                           ]))
+        nc=1
+
+elif opt.dataset == 'fake':
+    dataset = dset.FakeData(image_size=(3, imageSize, imageSize),
+                            transform=transforms.ToTensor())
+    nc=3
+
 assert dataset
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batchSize,
                                          shuffle=True, num_workers=int(workers))
@@ -87,44 +128,21 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
-def generate_sample(generator, latent_size, num_image=20000, batch_size=100): #generate data sample to compute the fid.
+def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
     generator.eval()
-    z_try = torch.randn(1, latent_size, 1, 1).to(device)
+    
+    z_try = Variable(torch.randn(1, latent_size, 1, 1).to(device))
     data_try = generator(z_try)
-    data_sample = torch.empty((num_image, data_try.shape[1], data_try.shape[2], data_try.shape[3]))
 
+    data_sample = np.empty((num_image, data_try.shape[1], data_try.shape[2], data_try.shape[3]))
     for i in range(0, num_image, batch_size):
         start = i
         end = i + batch_size
-        z = torch.randn(batch_size, latent_size, 1, 1).to(device)
+        z = Variable(torch.randn(batch_size, latent_size, 1, 1).to(device))
         d = generator(z)
-        data_sample[start:end] = d.cpu().data
+        data_sample[start:end] = d.cpu().data.numpy()
     
     return data_sample
-
-def compute_score(data, classifer):
-    classifer = classifer.cuda()
-    targets = np.zeros(1000, dtype=np.int32)
-    for i in range(len(data)):
-        y = np.zeros(3, dtype=np.int32)
-        for j in range(3):#R, G, B
-            x = data[i, j, :, :]
-            x = torch.unsqueeze(x, dim=0)
-            x = torch.unsqueeze(x, dim=0)
-            x = x.cuda()
-            output = classifer(x)
-            predict = output.cpu().detach().max(1)[1]
-            y[j] = predict
-        result = 100 * y[0] + 10 * y[1] + y[2]
-        targets[result] += 1
-    
-    covered_targets = np.sum(targets != 0)
-    Kl_score = 0
-    for i in range(1000):
-        if targets[i] != 0:
-            q = targets[i] / len(data)
-            Kl_score +=  q * np.log(q * 1000)
-    return covered_targets, Kl_score 
 
 netE = Encoder(ngpu, nz, nef, nc).to(device)
 netE.apply(weights_init)
@@ -145,8 +163,7 @@ netD.apply(weights_init)
 if opt.netD != '':
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
-classifier_M = MLP(imageSize * imageSize, 10, [1024, 1024, 1024])
-classifier_M.load_state_dict(torch.load(opt.classifier_M))
+
 # encoder = torch.load('./sim_encoder.pth')
 # encoder.eval()
 
@@ -160,16 +177,13 @@ optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerE = optim.Adam(netE.parameters(), lr=lr_encoder, betas=(beta1, 0.999), weight_decay=weight_decay_coeff)
 
-Kl_record = []
-covered_targets_record = []
+fid_record = []
 
 for epoch in range(nepochs):
-    # itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
-    # itpl_vl = max(itpl)
-    # itpl_vl = float(itpl_vl)
-    # print("itpl_vl: %d" % itpl_vl)
-    # 作为ablation study的一部分暂时去掉了插值部分
-    itpl_vl = 0
+    itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
+    itpl_vl = max(itpl)
+    itpl_vl = float(itpl_vl)
+    print("itpl_vl: %d" % itpl_vl)
     
     for i, data in enumerate(dataloader, 0):
         ############################
@@ -200,7 +214,7 @@ for epoch in range(nepochs):
         D_G_z1 = output.mean().item()
         errD = errD_real + errD_fake
         output = netD(fake)
-        errG = criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
+        errG = reg_coeff * criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
         if errG.item() < 3.2:
             optimizerD.zero_grad()
             errD.backward()
@@ -235,7 +249,7 @@ for epoch in range(nepochs):
 
         if i % 100 == 0:
             print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f Reconstruct_err: %.4f'
-            % (epoch + 1, nepochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, errE))
+            % (epoch, nepochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, errE))
     
     if (epoch + 1) % 10 == 0:
         vutils.save_image(real_cpu, '%s/real_samples.png' % opt.outp, normalize=True)
@@ -243,18 +257,13 @@ for epoch in range(nepochs):
         vutils.save_image(fake.detach(), '%s/fake_samples_epoch_%03d.png' % (opt.outp, epoch + 1), normalize=True)
 
         dataset_fake = generate_sample(generator = netG, latent_size = nz)
-        covered_targets, Kl_score = compute_score(dataset_fake, classifier_M)
-        covered_targets_record.append(covered_targets)
-        Kl_record.append(Kl_score)
-        print("Covered Targets:{}, KL Score:{}".format(covered_targets, Kl_score))
-        # do checkpointing
-        torch.save(netG.state_dict(), '%s/netG_onestep_epoch_%d.pth' % (opt.outf, epoch + 1))
-        torch.save(netD.state_dict(), '%s/netD_onestep_epoch_%d.pth' % (opt.outf, epoch + 1))
+        fid = calculate_fid(dataset_fake, m_true, s_true)
+        fid_record.append(fid)
+        print("The Frechet Inception Distance:", fid)
+         # do checkpointing
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch + 1))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch + 1))
 
-with open('./score_record_onestep.txt', 'w') as f:
-    i0 = 0
-    for (i, K) in zip(covered_targets_record, Kl_record):
-        i0 += 1
-        f.write("epoch " + str(10 * i0) + ":\n")
-        f.write("covered targets:"+ str(i) + '\n')
-        f.write("KL div:" + str(K) + '\n')
+with open('./fid_record.txt', 'w') as f:
+    for i in fid_record:
+        f.write(str(i) + '\n')
