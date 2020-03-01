@@ -221,7 +221,7 @@ for epoch in range(nepochs):
         ############################
         # (2) Update G network: maximize log(D(G(z)))
         ###########################
-        netG.zero_grad()
+        optimizerG.zero_grad()
         errG.backward()
         optimizerG.step()
 
@@ -245,7 +245,7 @@ for epoch in range(nepochs):
             output = netD(real_cpu)
             err_reconstruct = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
             errE = err_reconstruct + criterion_BCE(output, real_label)
-            netE.zero_grad()
+            optimizerE.zero_grad()
             errE.backward()
             optimizerE.step()
 
@@ -254,7 +254,7 @@ for epoch in range(nepochs):
             print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f Reconstruct_err: %.4f'
             % (epoch, nepochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, err_reconstruct))
     
-    if (epoch) % 10 == 0:
+    if (epoch + 1) % 10 == 0:
         vutils.save_image(real_cpu, '%s/real_samples.png' % opt.outp, normalize=True)
         fake = netG(fixed_noise)
         vutils.save_image(fake.detach(), '%s/fake_samples_epoch_%03d.png' % (opt.outp, epoch + 1), normalize=True)
