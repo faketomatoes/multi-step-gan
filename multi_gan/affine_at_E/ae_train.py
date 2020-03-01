@@ -13,7 +13,7 @@ import argparse
 import numpy as np
 
 from model_ae import *
-
+from model_GAN import *
 
 
 def to_img(x):
@@ -27,7 +27,7 @@ num_epochs = 100
 batch_size = 128
 learning_rate = 1e-3
 nef = 16
-ngf = 16
+ngf = 64
 nc = 3
 nz = 100
 imageSize = 64
@@ -68,7 +68,7 @@ else:
 
 # model = autoencoder().cuda()
 encoder = Encoder(ngpu = ngpu, nc=nc, nef=nef, nz=nz).cuda()
-decoder = Decoder(nc=nc, ngf=ngf, nz=nz).cuda()
+decoder = Generator(ngpu = ngpu, nc=nc, ngf=ngf, nz=nz).cuda()
 
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(

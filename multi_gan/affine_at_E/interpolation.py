@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import math
 import os
 import random
 import torch
@@ -33,17 +34,16 @@ nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
-reg_coeff = 1 # trade-off coeff of the GAN loss regularizer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path to dataset')
 parser.add_argument('--cuda_device', default='0', help='available cuda device.')
-parser.add_argument('--netG', default='', help="path to netG (to continue training)")
+parser.add_argument('--netG', default='./trained_model/sim_decoder.pth', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--netE', default='', help='path to netE.')
+parser.add_argument('--netE', default='./trained_model/sim_encoder.pth', help='path to netE.')
 parser.add_argument('--outf', default='./trained_model', help='folder to output model checkpoints')
-parser.add_argument('--outp', default='./fake-imgs', help='folder to output images')
+parser.add_argument('--outp', default='./try', help='folder to output images')
 parser.add_argument('--manualSeed', type=int, help='manual random seed')
 parser.add_argument('--classes', default='bedroom', help='comma separated list of classes for the lsun data set')
 
@@ -90,7 +90,7 @@ elif opt.dataset == 'cifar10':
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
-    nc=3    
+    nc=3
     m_true, s_true = compute_cifar10_statistics()
 
 elif opt.dataset == 'mnist':
@@ -121,12 +121,10 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1 and not (m.weight is None):
+    elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
-    elif classname.find('Affine') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
     generator.eval()
@@ -205,7 +203,7 @@ for epoch in range(nepochs):
             netE.eval()
             latent_var = netE(real_cpu)
             latent_var = latent_var.detach()
-            noise = itpl_vl/nepochs * latent_var + (1 - itpl_vl/nepochs) * noise
+            noise = math.cos(itpl_vl/nepochs * math.pi / 2) * latent_var + math.sin(itpl_vl/nepochs * math.pi / 2) * noise
         fake = netG(noise)
         fake_label = torch.full((batch_size,), 0, device=device)
         output = netD(fake.detach())
@@ -214,7 +212,7 @@ for epoch in range(nepochs):
         D_G_z1 = output.mean().item()
         errD = errD_real + errD_fake
         output = netD(fake)
-        errG = reg_coeff * criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
+        errG = criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
         if errG.item() < 3.2:
             optimizerD.zero_grad()
             errD.backward()
@@ -241,7 +239,12 @@ for epoch in range(nepochs):
 
         for k in range(10):
             netE.train()
-            errE = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
+            if itpl_vl > 0:
+                latent_var = netE(real_cpu)
+                noise = math.cos(itpl_vl/nepochs * math.pi / 2) * latent_var + math.sin(itpl_vl/nepochs * math.pi / 2) * noise
+            output = netD(real_cpu)
+            err_reconstruct = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
+            errE = err_reconstruct + criterion_BCE(output, real_label)
             netE.zero_grad()
             errE.backward()
             optimizerE.step()
@@ -249,9 +252,9 @@ for epoch in range(nepochs):
 
         if i % 100 == 0:
             print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f Reconstruct_err: %.4f'
-            % (epoch, nepochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, errE))
+            % (epoch, nepochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, err_reconstruct))
     
-    if (epoch + 1) % 10 == 0:
+    if (epoch) % 10 == 0:
         vutils.save_image(real_cpu, '%s/real_samples.png' % opt.outp, normalize=True)
         fake = netG(fixed_noise)
         vutils.save_image(fake.detach(), '%s/fake_samples_epoch_%03d.png' % (opt.outp, epoch + 1), normalize=True)

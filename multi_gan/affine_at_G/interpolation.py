@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import os
 import random
+import math
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -33,6 +34,7 @@ nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
+reg_coeff = 1 # trade-off coeff of the GAN loss regularizer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
@@ -40,9 +42,9 @@ parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path 
 parser.add_argument('--cuda_device', default='0', help='available cuda device.')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--netE', default='./trained_model/sim_encoder.pth', help='path to netE.')
+parser.add_argument('--netE', default='', help='path to netE.')
 parser.add_argument('--outf', default='./trained_model', help='folder to output model checkpoints')
-parser.add_argument('--outp', default='./try', help='folder to output images')
+parser.add_argument('--outp', default='./fake-imgs', help='folder to output images')
 parser.add_argument('--manualSeed', type=int, help='manual random seed')
 parser.add_argument('--classes', default='bedroom', help='comma separated list of classes for the lsun data set')
 
@@ -89,7 +91,7 @@ elif opt.dataset == 'cifar10':
                                transforms.ToTensor(),
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
-    nc=3
+    nc=3    
     m_true, s_true = compute_cifar10_statistics()
 
 elif opt.dataset == 'mnist':
@@ -120,10 +122,12 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
+    elif classname.find('BatchNorm') != -1 and not (m.weight is None):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
-
+    elif classname.find('Affine') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
 def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #generate data sample to compute the fid.
     generator.eval()
@@ -211,7 +215,7 @@ for epoch in range(nepochs):
         D_G_z1 = output.mean().item()
         errD = errD_real + errD_fake
         output = netD(fake)
-        errG = criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
+        errG = reg_coeff * criterion_BCE(output, real_label) + criterion_reconstruct(real_cpu, netG(netE(real_cpu))) # fake labels are real for generator cost
         if errG.item() < 3.2:
             optimizerD.zero_grad()
             errD.backward()
