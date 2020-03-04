@@ -34,16 +34,17 @@ nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
+alpha = 1
+default_device = 'cuda:4'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='cifar10', help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', default='~/datasets/data_cifar10', help='path to dataset')
-parser.add_argument('--cuda_device', default='0', help='available cuda device.')
-parser.add_argument('--netG', default='./trained_model/sim_decoder.pth', help="path to netG (to continue training)")
+parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--netE', default='./trained_model/sim_encoder.pth', help='path to netE.')
+parser.add_argument('--netE', default='', help='path to netE.')
 parser.add_argument('--outf', default='./trained_model', help='folder to output model checkpoints')
-parser.add_argument('--outp', default='./try', help='folder to output images')
+parser.add_argument('--outp', default='./fake-imgs', help='folder to output images')
 parser.add_argument('--manualSeed', type=int, help='manual random seed')
 parser.add_argument('--classes', default='bedroom', help='comma separated list of classes for the lsun data set')
 
@@ -112,9 +113,8 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=batchSize,
                                          shuffle=True, num_workers=int(workers))
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = opt.cuda_device
-ngpu = len(opt.cuda_device.split(','))
-device = torch.device("cuda:0")
+ngpu = 1
+device = torch.device(default_device)
 
 # custom weights initialization called on netG and netD
 def weights_init(m):
@@ -177,6 +177,7 @@ optimizerE = optim.Adam(netE.parameters(), lr=lr_encoder, betas=(beta1, 0.999), 
 
 fid_record = []
 
+
 for epoch in range(nepochs):
     itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
     itpl_vl = max(itpl)
@@ -191,19 +192,23 @@ for epoch in range(nepochs):
         # netD.zero_grad()
         real_cpu = data[0].to(device)
         batch_size = real_cpu.size(0)
+
         real_label = torch.full((batch_size,), 1, device=device)
+        fake_label = torch.full((batch_size,), 0, device=device)
 
         output = netD(real_cpu)
         errD_real = criterion_BCE(output, real_label)
         # errD_real.backward()
         D_x = output.mean().item()
-        noise = torch.randn(batch_size, nz, 1, 1, device=device)
+        noise0 = torch.randn(batch_size, nz, 1, 1, device=device)
         if itpl_vl > 0:
             # inference the latent variable
             netE.eval()
             latent_var = netE(real_cpu)
             latent_var = latent_var.detach()
-            noise = math.cos(itpl_vl/nepochs * math.pi / 2) * latent_var + math.sin(itpl_vl/nepochs * math.pi / 2) * noise
+            noise = math.sin(itpl_vl/nepochs * math.pi / 2) * latent_var + math.cos(itpl_vl/nepochs * math.pi / 2) * noise0
+        else:
+            noise = noise0
         fake = netG(noise)
         fake_label = torch.full((batch_size,), 0, device=device)
         output = netD(fake.detach())
@@ -236,15 +241,17 @@ for epoch in range(nepochs):
         #         netE.zero_grad()
         #         errE.backward()
         #         optimizerE.step()
-
+        netE.train()
         for k in range(10):
-            netE.train()
             if itpl_vl > 0:
                 latent_var = netE(real_cpu)
-                noise = math.cos(itpl_vl/nepochs * math.pi / 2) * latent_var + math.sin(itpl_vl/nepochs * math.pi / 2) * noise
-            output = netD(real_cpu)
+                noise = math.sin(itpl_vl/nepochs * math.pi / 2) * latent_var + math.cos(itpl_vl/nepochs * math.pi / 2) * noise0
+            else:
+                noise = noise0
+            output = netD(netG(noise))
             err_reconstruct = criterion_reconstruct(real_cpu, netG(netE(real_cpu)))
-            errE = err_reconstruct + criterion_BCE(output, real_label)
+            GAN_loss = criterion_BCE(output, real_label)
+            errE = err_reconstruct + alpha * GAN_loss
             optimizerE.zero_grad()
             errE.backward()
             optimizerE.step()
