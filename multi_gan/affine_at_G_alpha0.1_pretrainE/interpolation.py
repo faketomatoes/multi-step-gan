@@ -24,6 +24,7 @@ nz = 100 # size of latent variable
 ngf = 64 
 ndf = 64 
 nef = 16
+np = 5 #num of groups of coordinates
 
 lr = 0.0002
 lr_encoder = 0.01
@@ -34,7 +35,8 @@ nepochs = 100
 num_inter = 40
 beta1 = 0.5 # 'beta1 for adam. default=0.5'
 weight_decay_coeff = 5e-4 # weight decay coefficient for training netE.
-alpha = 1
+alpha = 0.1 # coefficient of the GAN loss when updating netE
+epsilon = 0.4 # coefficient of the mutual information regularizer when updating GAN
 default_device = 'cuda:5'
 
 parser = argparse.ArgumentParser()
@@ -144,6 +146,7 @@ def generate_sample(generator, latent_size, num_image=1000, batch_size=50): #gen
         data_sample[start:end] = d.cpu().data.numpy()
     
     return data_sample
+
 
 netE = Encoder(ngpu, nz, nef, nc).to(device)
 netE.apply(weights_init)
