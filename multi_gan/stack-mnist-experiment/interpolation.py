@@ -40,7 +40,7 @@ parser.add_argument('--source_root', default='~/datasets', help='path to dataset
 parser.add_argument('--cuda_device', default='0', help='available cuda device.')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--netE', default='./trained-models/sim_encoder.pth', help='path to netE.')
+parser.add_argument('--netE', default='', help='path to netE.')
 parser.add_argument('--classifier_M', default='./trained-models/MNIST_classifier.pth', help="path to netD (to continue training)")
 parser.add_argument('--outf', default='./trained-models', help='folder to output model checkpoints')
 parser.add_argument('--outp', default='./fake-imgs-onestep', help='folder to output images')
@@ -63,8 +63,8 @@ torch.manual_seed(opt.manualSeed)
 
 cudnn.benchmark = True
 
-dataset = Stacked_MNIST(imageSize=imageSize)
-#dataset = Stacked_MNIST(load=False, source_root=opt.source_root, imageSize=imageSize)
+#dataset = Stacked_MNIST(imageSize=imageSize)
+dataset = Stacked_MNIST(load=False, source_root=opt.source_root, imageSize=imageSize)
 nc=3
 assert dataset
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batchSize,
@@ -80,10 +80,12 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
+    elif classname.find('BatchNorm') != -1 and not (m.weight is None):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
-
+    elif classname.find('Affine') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
 def generate_sample(generator, latent_size, num_image=20000, batch_size=100): #generate data sample to compute the fid.
     generator.eval()
@@ -162,10 +164,12 @@ Kl_record = []
 covered_targets_record = []
 
 for epoch in range(nepochs):
-    itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
-    itpl_vl = max(itpl)
-    itpl_vl = float(itpl_vl)
-    print("itpl_vl: %d" % itpl_vl)
+    # itpl = [num_inter - epoch, 0] # num_inter指的是进行插值的epoch数量
+    # itpl_vl = max(itpl)
+    # itpl_vl = float(itpl_vl)
+    # print("itpl_vl: %d" % itpl_vl)
+    # 作为ablation study的一部分暂时去掉了插值部分
+    itpl_vl = 0
     
     for i, data in enumerate(dataloader, 0):
         ############################

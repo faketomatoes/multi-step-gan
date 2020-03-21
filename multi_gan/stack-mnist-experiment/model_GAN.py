@@ -1,12 +1,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.parallel
+class CustomeAffine(nn.Module):
+    def __init__(self, input_features):
+        super(CustomeAffine, self).__init__()
+        self.input_features = input_features
+        self.weight = nn.Parameter(torch.Tensor(input_features, 1, 1))
+        self.bias = nn.Parameter(torch.Tensor(input_features, 1, 1))
+    def forward(self, input):
+        return input.mul(self.weight) + self.bias
 class Generator(nn.Module):
     def __init__(self, ngpu, nz, ngf, nc):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
             # input is Z, going into a convolution
+            CustomeAffine(nz),
             nn.ConvTranspose2d(     nz, ngf * 8, 4, 1, 0, bias=False),
             nn.BatchNorm2d(ngf * 8),
             nn.ReLU(True),
